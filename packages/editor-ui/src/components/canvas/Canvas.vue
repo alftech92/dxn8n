@@ -142,28 +142,65 @@ const classes = computed(() => ({
 }));
 
 /**
- * Key bindings
+ * Panning and Selection key bindings
  */
 
-const disableKeyBindings = computed(() => !props.keyBindings);
-
-/**
- * @see https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_key_values#whitespace_keys
- */
-
+// @see https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_key_values#whitespace_keys
 const panningKeyCode = ref<string[] | true>(isMobileDevice ? true : [' ', controlKeyCode]);
 const panningMouseButton = ref<number[] | true>(isMobileDevice ? true : [1]);
 const selectionKeyCode = ref<string | true | null>(isMobileDevice ? 'Shift' : true);
 
-onKeyDown(panningKeyCode.value, () => {
-	selectionKeyCode.value = null;
-	panningMouseButton.value = [0, 1];
-});
+onKeyDown(
+	panningKeyCode.value,
+	() => {
+		selectionKeyCode.value = null;
+		panningMouseButton.value = [0, 1];
+	},
+	{
+		dedupe: true,
+	},
+);
 
 onKeyUp(panningKeyCode.value, () => {
 	selectionKeyCode.value = true;
 	panningMouseButton.value = [1];
 });
+
+/**
+ * Rename node key bindings
+ * We differentiate between short and long press because the space key is also used for activating panning
+ */
+
+const renameKeyCode = ' ';
+const renameKeyDownTime = ref<number | null>(null);
+const renameKeyDownThreshold = 300;
+
+onKeyDown(
+	renameKeyCode,
+	() => {
+		if (!lastSelectedNode.value || props.readOnly) return;
+
+		renameKeyDownTime.value = Date.now();
+	},
+	{
+		dedupe: true,
+	},
+);
+
+onKeyUp(renameKeyCode, () => {
+	if (!lastSelectedNode.value || !renameKeyDownTime.value || props.readOnly) return;
+
+	const isShortPress = Date.now() - renameKeyDownTime.value < renameKeyDownThreshold;
+	if (isShortPress) {
+		emit('update:node:name', lastSelectedNode.value.id);
+	}
+});
+
+/**
+ * Key bindings
+ */
+
+const disableKeyBindings = computed(() => !props.keyBindings);
 
 function selectLeftNode(id: string) {
 	const incomingNodes = getIncomingNodes(id);
