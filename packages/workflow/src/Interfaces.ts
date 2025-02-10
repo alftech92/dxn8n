@@ -24,7 +24,6 @@ import type { ExecutionStatus } from './ExecutionStatus';
 import type { Result } from './result';
 import type { Workflow } from './Workflow';
 import type { EnvProviderState } from './WorkflowDataProxyEnvProvider';
-import type { WorkflowHooks } from './WorkflowHooks';
 
 export interface IAdditionalCredentialOptions {
 	oauth2?: IOAuth2Options;
@@ -398,26 +397,6 @@ export interface INodeTypeNameVersion {
 	version: number;
 }
 
-export interface IGetExecutePollFunctions {
-	(
-		workflow: Workflow,
-		node: INode,
-		additionalData: IWorkflowExecuteAdditionalData,
-		mode: WorkflowExecuteMode,
-		activation: WorkflowActivateMode,
-	): IPollFunctions;
-}
-
-export interface IGetExecuteTriggerFunctions {
-	(
-		workflow: Workflow,
-		node: INode,
-		additionalData: IWorkflowExecuteAdditionalData,
-		mode: WorkflowExecuteMode,
-		activation: WorkflowActivateMode,
-	): ITriggerFunctions;
-}
-
 export interface IRunNodeResponse {
 	data: INodeExecutionData[][] | NodeExecutionOutput | null | undefined;
 	closeFunction?: CloseFunction;
@@ -759,7 +738,7 @@ export interface DeduplicationHelperFunctions {
 		options: ICheckProcessedOptions,
 	): Promise<number>;
 }
-export interface NodeHelperFunctions {
+interface NodeHelperFunctions {
 	copyBinaryFile(filePath: string, fileName: string, mimeType?: string): Promise<IBinaryData>;
 }
 
@@ -852,6 +831,7 @@ export type NodeTypeAndVersion = {
 	type: string;
 	typeVersion: number;
 	disabled: boolean;
+	parameters?: INodeParameters;
 };
 
 export interface FunctionsBase {
@@ -869,7 +849,10 @@ export interface FunctionsBase {
 	getRestApiUrl(): string;
 	getInstanceBaseUrl(): string;
 	getInstanceId(): string;
-	getChildNodes(nodeName: string): NodeTypeAndVersion[];
+	getChildNodes(
+		nodeName: string,
+		options?: { includeNodeParameters?: boolean },
+	): NodeTypeAndVersion[];
 	getParentNodes(nodeName: string): NodeTypeAndVersion[];
 	getKnownNodeTypes(): IDataObject;
 	getMode?: () => WorkflowExecuteMode;
@@ -1026,7 +1009,7 @@ export interface ILoadOptionsFunctions extends FunctionsBase {
 export type FieldValueOption = { name: string; type: FieldType | 'any' };
 
 export type IWorkflowNodeContext = ExecuteFunctions.GetNodeParameterFn &
-	Pick<FunctionsBase, 'getNode'>;
+	Pick<FunctionsBase, 'getNode' | 'getWorkflow'>;
 
 export interface ILocalLoadOptionsFunctions {
 	getWorkflowNodeContext(nodeType: string): Promise<IWorkflowNodeContext | null>;
@@ -1190,11 +1173,6 @@ export interface INodeExecutionData {
 	 * will be removed in future. For more information see PR #12469.
 	 */
 	index?: number;
-}
-
-export interface INodeExecuteFunctions {
-	getExecutePollFunctions: IGetExecutePollFunctions;
-	getExecuteTriggerFunctions: IGetExecuteTriggerFunctions;
 }
 
 export type NodeParameterValue = string | number | boolean | undefined | null;
@@ -2258,17 +2236,6 @@ export interface IWorkflowCredentials {
 	};
 }
 
-export interface IWorkflowExecuteHooks {
-	[key: string]: Array<(...args: any[]) => Promise<void>> | undefined;
-	nodeExecuteAfter?: Array<
-		(nodeName: string, data: ITaskData, executionData: IRunExecutionData) => Promise<void>
-	>;
-	nodeExecuteBefore?: Array<(nodeName: string) => Promise<void>>;
-	workflowExecuteAfter?: Array<(data: IRun, newStaticData: IDataObject) => Promise<void>>;
-	workflowExecuteBefore?: Array<(workflow?: Workflow, data?: IRunExecutionData) => Promise<void>>;
-	sendResponse?: Array<(response: IExecuteResponsePromiseData) => Promise<void>>;
-}
-
 export interface IWorkflowExecutionDataProcess {
 	destinationNode?: string;
 	restartExecutionId?: string;
@@ -2280,7 +2247,7 @@ export interface IWorkflowExecutionDataProcess {
 	executionData?: IRunExecutionData;
 	runData?: IRunData;
 	pinData?: IPinData;
-	retryOf?: string;
+	retryOf?: string | null;
 	pushRef?: string;
 	startNodes?: StartNodeData[];
 	workflowData: IWorkflowBase;
@@ -2289,12 +2256,10 @@ export interface IWorkflowExecutionDataProcess {
 	/**
 	 * Defines which version of the partial execution flow is used.
 	 * Possible values are:
-	 *  0 - use the old flow
-	 *  1 - use the new flow
-	 * -1 - the backend chooses which flow based on the environment variable
-	 *      PARTIAL_EXECUTION_VERSION_DEFAULT
+	 *  1 - use the old flow
+	 *  2 - use the new flow
 	 */
-	partialExecutionVersion?: string;
+	partialExecutionVersion?: 1 | 2;
 	dirtyNodeNames?: string[];
 	triggerToStartFrom?: {
 		name: string;
@@ -2348,7 +2313,6 @@ export interface IWorkflowExecuteAdditionalData {
 	) => Promise<ExecuteWorkflowData>;
 	executionId?: string;
 	restartExecutionId?: string;
-	hooks?: WorkflowHooks;
 	httpResponse?: express.Response;
 	httpRequest?: express.Request;
 	restApiUrl: string;
@@ -2404,11 +2368,6 @@ export type WorkflowActivateMode =
 	| 'activate'
 	| 'manual' // unused
 	| 'leadershipChange';
-
-export interface IWorkflowHooksOptionalParameters {
-	retryOf?: string;
-	pushRef?: string;
-}
 
 export namespace WorkflowSettings {
 	export type CallerPolicy = 'any' | 'none' | 'workflowsFromAList' | 'workflowsFromSameOwner';
@@ -2656,6 +2615,13 @@ export interface IExecutionSummaryNodeExecutionResult {
 
 export interface ResourceMapperFields {
 	fields: ResourceMapperField[];
+	emptyFieldsNotice?: string;
+}
+
+export interface WorkflowInputsData {
+	fields: ResourceMapperField[];
+	dataMode: string;
+	subworkflowInfo?: { id?: string };
 }
 
 export interface ResourceMapperField {
@@ -2673,6 +2639,7 @@ export interface ResourceMapperField {
 
 export type FormFieldsParameter = Array<{
 	fieldLabel: string;
+	elementName?: string;
 	fieldType?: string;
 	requiredField?: boolean;
 	fieldOptions?: { values: Array<{ option: string }> };
@@ -2680,7 +2647,10 @@ export type FormFieldsParameter = Array<{
 	multipleFiles?: boolean;
 	acceptFileTypes?: string;
 	formatDate?: string;
+	html?: string;
 	placeholder?: string;
+	fieldName?: string;
+	fieldValue?: string;
 }>;
 
 export type FieldTypeMap = {

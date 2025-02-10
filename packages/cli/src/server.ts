@@ -37,7 +37,6 @@ import '@/controllers/active-workflows.controller';
 import '@/controllers/annotation-tags.controller.ee';
 import '@/controllers/auth.controller';
 import '@/controllers/binary-data.controller';
-import '@/controllers/curl.controller';
 import '@/controllers/ai.controller';
 import '@/controllers/dynamic-node-parameters.controller';
 import '@/controllers/invitation.controller';
@@ -133,6 +132,10 @@ export class Server extends AbstractServer {
 
 		if (!this.globalConfig.endpoints.disableUi) {
 			await import('@/controllers/cta.controller');
+		}
+
+		if (!this.globalConfig.tags.disabled) {
+			await import('@/controllers/tags.controller');
 		}
 
 		// ----------------------------------------
@@ -319,8 +322,27 @@ export class Server extends AbstractServer {
 				res.sendStatus(404);
 			};
 
+			const serveSchemas: express.RequestHandler = async (req, res) => {
+				const { node, version, resource, operation } = req.params;
+				const filePath = this.loadNodesAndCredentials.resolveSchema({
+					node,
+					resource,
+					operation,
+					version,
+				});
+
+				if (filePath) {
+					try {
+						await fsAccess(filePath);
+						return res.sendFile(filePath, cacheOptions);
+					} catch {}
+				}
+				res.sendStatus(404);
+			};
+
 			this.app.use('/icons/@:scope/:packageName/*/*.(svg|png)', serveIcons);
 			this.app.use('/icons/:packageName/*/*.(svg|png)', serveIcons);
+			this.app.use('/schemas/:node/:version/:resource?/:operation?.json', serveSchemas);
 
 			const isTLSEnabled =
 				this.globalConfig.protocol === 'https' && !!(this.sslKey && this.sslCert);
@@ -369,6 +391,7 @@ export class Server extends AbstractServer {
 					method === 'GET' &&
 					accept &&
 					(accept.includes('text/html') || accept.includes('*/*')) &&
+					!req.path.endsWith('.wasm') &&
 					!nonUIRoutesRegex.test(req.path)
 				) {
 					res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');

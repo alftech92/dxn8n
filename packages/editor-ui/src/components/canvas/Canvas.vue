@@ -1,19 +1,27 @@
 <script lang="ts" setup>
-import type {
-	CanvasConnection,
-	CanvasNode,
-	CanvasNodeMoveEvent,
-	CanvasEventBusEvents,
-	ConnectStartEvent,
+import {
+	type CanvasConnection,
+	type CanvasNode,
+	type CanvasNodeMoveEvent,
+	type CanvasEventBusEvents,
+	type ConnectStartEvent,
+	CanvasNodeRenderType,
 } from '@/types';
-import type { Connection, XYPosition, NodeDragEvent, GraphNode } from '@vue-flow/core';
+import type {
+	Connection,
+	XYPosition,
+	NodeDragEvent,
+	NodeMouseEvent,
+	GraphNode,
+} from '@vue-flow/core';
 import { useVueFlow, VueFlow, PanelPosition, MarkerType } from '@vue-flow/core';
 import { MiniMap } from '@vue-flow/minimap';
 import Node from './elements/nodes/CanvasNode.vue';
 import Edge from './elements/edges/CanvasEdge.vue';
 import { computed, onMounted, onUnmounted, provide, ref, toRef, useCssModule, watch } from 'vue';
 import type { EventBus } from 'n8n-design-system';
-import { createEventBus, useDeviceSupport } from 'n8n-design-system';
+import { createEventBus } from 'n8n-design-system';
+import { useDeviceSupport } from '@n8n/composables/useDeviceSupport';
 import { useContextMenu, type ContextMenuAction } from '@/composables/useContextMenu';
 import { useKeybindings } from '@/composables/useKeybindings';
 import ContextMenu from '@/components/ContextMenu/ContextMenu.vue';
@@ -27,6 +35,7 @@ import CanvasArrowHeadMarker from './elements/edges/CanvasArrowHeadMarker.vue';
 import CanvasBackground from './elements/background/CanvasBackground.vue';
 import { useCanvasTraversal } from '@/composables/useCanvasTraversal';
 import { NodeConnectionType } from 'n8n-workflow';
+import { useCanvasNodeHover } from '@/composables/useCanvasNodeHover';
 
 const $style = useCssModule();
 
@@ -79,7 +88,6 @@ const props = withDefaults(
 		readOnly?: boolean;
 		executing?: boolean;
 		keyBindings?: boolean;
-		showBugReportingButton?: boolean;
 		loading?: boolean;
 	}>(),
 	{
@@ -212,8 +220,9 @@ const keyMap = computed(() => ({
 	ctrl_c: emitWithSelectedNodes((ids) => emit('copy:nodes', ids)),
 	enter: emitWithLastSelectedNode((id) => onSetNodeActive(id)),
 	ctrl_a: () => addSelectedNodes(graphNodes.value),
-	'shift_+|+|=': async () => await onZoomIn(),
-	'shift+_|-|_': async () => await onZoomOut(),
+	// Support both key and code for zooming in and out
+	'shift_+|+|=|shift_Equal|Equal': async () => await onZoomIn(),
+	'shift+_|-|_|shift_Minus|Minus': async () => await onZoomOut(),
 	0: async () => await onResetZoom(),
 	1: async () => await onFitView(),
 	ArrowUp: emitWithLastSelectedNode(selectUpperSiblingNode),
@@ -250,6 +259,20 @@ const hasSelection = computed(() => selectedNodes.value.length > 0);
 const selectedNodeIds = computed(() => selectedNodes.value.map((node) => node.id));
 
 const lastSelectedNode = ref<GraphNode>();
+const triggerNodes = computed(() =>
+	props.nodes.filter(
+		(node) =>
+			node.data?.render.type === CanvasNodeRenderType.Default && node.data.render.options.trigger,
+	),
+);
+
+const hoveredTriggerNode = useCanvasNodeHover(triggerNodes, vueFlow, (nodeRect) => ({
+	x: nodeRect.x - nodeRect.width * 2, // should cover the width of trigger button
+	y: nodeRect.y - nodeRect.height,
+	width: nodeRect.width * 4,
+	height: nodeRect.height * 3,
+}));
+
 watch(selectedNodes, (nodes) => {
 	if (!lastSelectedNode.value || !nodes.find((node) => node.id === lastSelectedNode.value?.id)) {
 		lastSelectedNode.value = nodes[nodes.length - 1];
@@ -270,6 +293,14 @@ function onUpdateNodePosition(id: string, position: XYPosition) {
 
 function onNodeDragStop(event: NodeDragEvent) {
 	onUpdateNodesPosition(event.nodes.map(({ id, position }) => ({ id, position })));
+}
+
+function onNodeClick({ event, node }: NodeMouseEvent) {
+	if (event.ctrlKey || event.metaKey || selectedNodes.value.length < 2) {
+		return;
+	}
+
+	onSelectNodes({ ids: [node.id] });
 }
 
 function onSelectionDragStop(event: NodeDragEvent) {
@@ -505,6 +536,13 @@ function onOpenContextMenu(event: MouseEvent) {
 	});
 }
 
+function onOpenSelectionContextMenu({ event }: { event: MouseEvent }) {
+	contextMenu.open(event, {
+		source: 'canvas',
+		nodeIds: selectedNodeIds.value,
+	});
+}
+
 function onOpenNodeContextMenu(
 	id: string,
 	event: MouseEvent,
@@ -676,7 +714,9 @@ provide(CanvasKey, {
 		@move-start="onPaneMoveStart"
 		@move-end="onPaneMoveEnd"
 		@node-drag-stop="onNodeDragStop"
+		@node-click="onNodeClick"
 		@selection-drag-stop="onSelectionDragStop"
+		@selection-context-menu="onOpenSelectionContextMenu"
 		@dragover="onDragOver"
 		@drop="onDrop"
 	>
@@ -686,6 +726,7 @@ provide(CanvasKey, {
 				:read-only="readOnly"
 				:event-bus="eventBus"
 				:hovered="nodesHoveredById[nodeProps.id]"
+				:nearby-hovered="nodeProps.id === hoveredTriggerNode.id.value"
 				@delete="onDeleteNode"
 				@run="onRunNode"
 				@select="onSelectNode"
@@ -747,7 +788,6 @@ provide(CanvasKey, {
 			:class="$style.canvasControls"
 			:position="controlsPosition"
 			:show-interactive="false"
-			:show-bug-reporting-button="showBugReportingButton"
 			:zoom="viewport.zoom"
 			@zoom-to-fit="onFitView"
 			@zoom-in="onZoomIn"

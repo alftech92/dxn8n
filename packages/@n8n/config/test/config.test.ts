@@ -107,6 +107,9 @@ describe('GlobalConfig', () => {
 				maxFileSizeInKB: 10240,
 			},
 		},
+		externalHooks: {
+			files: [],
+		},
 		externalSecrets: {
 			preferGet: false,
 			updateInterval: 300,
@@ -116,6 +119,7 @@ describe('GlobalConfig', () => {
 				enabled: true,
 				registry: 'https://registry.npmjs.org',
 				reinstallMissing: false,
+				allowToolUsage: false,
 			},
 			errorTriggerType: 'n8n-nodes-base.errorTrigger',
 			include: [],
@@ -138,6 +142,7 @@ describe('GlobalConfig', () => {
 		externalStorage: {
 			s3: {
 				host: '',
+				protocol: 'https',
 				bucket: {
 					name: '',
 					region: '',
@@ -209,6 +214,7 @@ describe('GlobalConfig', () => {
 					username: '',
 					clusterNodes: '',
 					tls: false,
+					dualStack: false,
 				},
 				gracefulShutdownTimeout: 30,
 				prefix: 'bull',
@@ -236,6 +242,9 @@ describe('GlobalConfig', () => {
 		sentry: {
 			backendDsn: '',
 			frontendDsn: '',
+			n8nVersion: '',
+			environment: '',
+			deploymentName: '',
 		},
 		logging: {
 			level: 'info',
@@ -291,6 +300,13 @@ describe('GlobalConfig', () => {
 		},
 		aiAssistant: {
 			baseUrl: '',
+		},
+		tags: {
+			disabled: false,
+		},
+		partialExecutions: {
+			version: 1,
+			enforce: false,
 		},
 	};
 

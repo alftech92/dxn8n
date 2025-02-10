@@ -454,7 +454,7 @@ export async function executeWebhook(
 		}
 
 		let pinData: IPinData | undefined;
-		const usePinData = executionMode === 'manual';
+		const usePinData = ['manual', 'evaluation'].includes(executionMode);
 		if (usePinData) {
 			pinData = workflowData.pinData;
 			runExecutionData.resultData.pinData = pinData;
@@ -530,6 +530,7 @@ export async function executeWebhook(
 						`Error with Webhook-Response for execution "${executionId}": "${error.message}"`,
 						{ executionId, workflowId: workflow.id },
 					);
+					responseCallback(error, {});
 				});
 		}
 
