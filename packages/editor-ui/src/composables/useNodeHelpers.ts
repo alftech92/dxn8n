@@ -676,7 +676,7 @@ export function useNodeHelpers() {
 			}
 
 			// Toggle disabled flag
-			const updateInformation = {
+			const updateInformation: INodeUpdatePropertiesInformation = {
 				name: node.name,
 				properties: {
 					disabled: newDisabledState,
@@ -696,7 +696,12 @@ export function useNodeHelpers() {
 			updateNodesInputIssues();
 			if (trackHistory) {
 				historyStore.pushCommandToUndo(
-					new EnableNodeToggleCommand(node.name, node.disabled === true, newDisabledState),
+					new EnableNodeToggleCommand(
+						node.name,
+						node.disabled === true,
+						newDisabledState,
+						Date.now(),
+					),
 				);
 			}
 		}
@@ -908,7 +913,7 @@ export function useNodeHelpers() {
 					type: NodeConnectionType.Main,
 				},
 			];
-			const removeCommand = new RemoveConnectionCommand(connectionData);
+			const removeCommand = new RemoveConnectionCommand(connectionData, Date.now());
 			historyStore.pushCommandToUndo(removeCommand);
 		}
 	}
@@ -1134,7 +1139,7 @@ export function useNodeHelpers() {
 			if (removeVisualConnection) {
 				deleteJSPlumbConnection(info.connection, trackHistory);
 			} else if (trackHistory) {
-				historyStore.pushCommandToUndo(new RemoveConnectionCommand(connectionInfo));
+				historyStore.pushCommandToUndo(new RemoveConnectionCommand(connectionInfo, Date.now()));
 			}
 			workflowsStore.removeConnection({ connection: connectionInfo });
 		}
@@ -1235,7 +1240,7 @@ export function useNodeHelpers() {
 			matchCredentials(newNode);
 			workflowsStore.addNode(newNode);
 			if (trackHistory) {
-				historyStore.pushCommandToUndo(new AddNodeCommand(newNode));
+				historyStore.pushCommandToUndo(new AddNodeCommand(newNode, Date.now()));
 			}
 		});
 

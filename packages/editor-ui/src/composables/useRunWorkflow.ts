@@ -39,25 +39,7 @@ import { useExecutionsStore } from '@/stores/executions.store';
 import { useTelemetry } from './useTelemetry';
 import { useSettingsStore } from '@/stores/settings.store';
 import { usePushConnectionStore } from '@/stores/pushConnection.store';
-
-const getDirtyNodeNames = (
-	runData: IRunData,
-	getParametersLastUpdate: (nodeName: string) => number | undefined,
-): string[] | undefined => {
-	const dirtyNodeNames = Object.entries(runData).reduce<string[]>((acc, [nodeName, tasks]) => {
-		if (!tasks.length) return acc;
-
-		const updatedAt = getParametersLastUpdate(nodeName) ?? 0;
-
-		if (updatedAt > tasks[0].startTime) {
-			acc.push(nodeName);
-		}
-
-		return acc;
-	}, []);
-
-	return dirtyNodeNames.length ? dirtyNodeNames : undefined;
-};
+import { useNodeDirtiness } from '@/composables/useNodeDirtiness';
 
 export function useRunWorkflow(useRunWorkflowOpts: { router: ReturnType<typeof useRouter> }) {
 	const nodeHelpers = useNodeHelpers();
@@ -73,6 +55,8 @@ export function useRunWorkflow(useRunWorkflowOpts: { router: ReturnType<typeof u
 	const uiStore = useUIStore();
 	const workflowsStore = useWorkflowsStore();
 	const executionsStore = useExecutionsStore();
+	const { dirtinessByName } = useNodeDirtiness();
+
 	// Starts to execute a workflow on server
 	async function runWorkflowApi(runData: IStartRunData): Promise<IExecutionPushResponse> {
 		if (!pushConnectionStore.isConnected) {
@@ -229,24 +213,31 @@ export function useRunWorkflow(useRunWorkflowOpts: { router: ReturnType<typeof u
 				}
 			}
 
-			const startNodes: StartNodeData[] = startNodeNames.map((name) => {
-				// Find for each start node the source data
-				let sourceData = get(runData, [name, 0, 'source', 0], null);
-				if (sourceData === null) {
-					const parentNodes = workflow.getParentNodes(name, NodeConnectionType.Main, 1);
-					const executeData = workflowHelpers.executeData(
-						parentNodes,
-						name,
-						NodeConnectionType.Main,
-						0,
-					);
-					sourceData = get(executeData, ['source', NodeConnectionType.Main, 0], null);
-				}
-				return {
-					name,
-					sourceData,
-				};
-			});
+			// partial executions must have a destination node
+			const isPartialExecution = options.destinationNode !== undefined;
+			const version = settingsStore.partialExecutionVersion;
+			debugger;
+			const startNodes: StartNodeData[] =
+				isPartialExecution && version === 2
+					? []
+					: startNodeNames.map((name) => {
+							// Find for each start node the source data
+							let sourceData = get(runData, [name, 0, 'source', 0], null);
+							if (sourceData === null) {
+								const parentNodes = workflow.getParentNodes(name, NodeConnectionType.Main, 1);
+								const executeData = workflowHelpers.executeData(
+									parentNodes,
+									name,
+									NodeConnectionType.Main,
+									0,
+								);
+								sourceData = get(executeData, ['source', NodeConnectionType.Main, 0], null);
+							}
+							return {
+								name,
+								sourceData,
+							};
+						});
 
 			const singleWebhookTrigger = triggers.find((node) =>
 				SINGLE_WEBHOOK_TRIGGERS.includes(node.type),
@@ -267,10 +258,6 @@ export function useRunWorkflow(useRunWorkflowOpts: { router: ReturnType<typeof u
 				return undefined;
 			}
 
-			// partial executions must have a destination node
-			const isPartialExecution = options.destinationNode !== undefined;
-			const settingsStore = useSettingsStore();
-			const version = settingsStore.partialExecutionVersion;
 			const startRunData: IStartRunData = {
 				workflowData,
 				// With the new partial execution version the backend decides what run
@@ -293,10 +280,11 @@ export function useRunWorkflow(useRunWorkflowOpts: { router: ReturnType<typeof u
 			}
 
 			if (startRunData.runData) {
-				startRunData.dirtyNodeNames = getDirtyNodeNames(
-					startRunData.runData,
-					workflowsStore.getParametersLastUpdate,
+				const nodeNames = Object.entries(dirtinessByName.value).flatMap(([nodeName, dirtiness]) =>
+					dirtiness ? [nodeName] : [],
 				);
+
+				startRunData.dirtyNodeNames = nodeNames.length > 0 ? nodeNames : undefined;
 			}
 
 			// Init the execution data to represent the start of the execution
