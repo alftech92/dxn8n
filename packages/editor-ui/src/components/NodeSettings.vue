@@ -5,6 +5,8 @@ import type {
 	INodeParameters,
 	INodeProperties,
 	NodeParameterValue,
+	IDataObject,
+	AssignmentValue,
 } from 'n8n-workflow';
 import {
 	NodeHelpers,
@@ -473,6 +475,56 @@ const valueChanged = (parameterData: IUpdateInformation) => {
 		}
 	} else if (parameterData.name.startsWith('parameters.')) {
 		// A node parameter changed
+
+		const isExpressionSyntaxInitialized = (value: string) => {
+			return !value.startsWith('=') && value.endsWith('{{ ');
+		};
+
+		const completeExpressionSyntax = (value: string) => {
+			return '=' + value + ' }}';
+		};
+
+		if (typeof newValue === 'string' && isExpressionSyntaxInitialized(newValue)) {
+			newValue = completeExpressionSyntax(newValue);
+		}
+
+		if (newValue && typeof newValue === 'object') {
+			if ((newValue as IDataObject).assignments) {
+				const assignments = (newValue as IDataObject).assignments as AssignmentValue[];
+
+				for (const assignment of assignments) {
+					if (isExpressionSyntaxInitialized(assignment.name)) {
+						assignment.name = completeExpressionSyntax(assignment.name);
+					}
+					if (
+						assignment.type === 'string' &&
+						isExpressionSyntaxInitialized(assignment.value as string)
+					) {
+						assignment.value = completeExpressionSyntax(assignment.value as string);
+					}
+				}
+			}
+
+			if ((newValue as IDataObject).conditions) {
+				const conditions = (newValue as IDataObject).conditions as Array<{
+					leftValue: string;
+					rightValue: string;
+					operator: { type: string };
+				}>;
+
+				for (const condition of conditions) {
+					if (isExpressionSyntaxInitialized(condition.leftValue)) {
+						condition.leftValue = completeExpressionSyntax(condition.leftValue);
+					}
+					if (
+						condition.operator.type === 'string' &&
+						isExpressionSyntaxInitialized(condition.rightValue)
+					) {
+						condition.rightValue = completeExpressionSyntax(condition.rightValue);
+					}
+				}
+			}
+		}
 
 		const nodeType = nodeTypesStore.getNodeType(_node.type, _node.typeVersion);
 		if (!nodeType) {
