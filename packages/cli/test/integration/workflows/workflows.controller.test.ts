@@ -270,7 +270,10 @@ describe('POST /workflows', () => {
 				type: 'team',
 			}),
 		);
-		await Container.get(ProjectService).addUser(project.id, owner.id, 'project:admin');
+		await Container.get(ProjectService).addUser(project.id, {
+			userId: owner.id,
+			role: 'project:admin',
+		});
 
 		//
 		// ACT
@@ -344,7 +347,10 @@ describe('POST /workflows', () => {
 				type: 'team',
 			}),
 		);
-		await Container.get(ProjectService).addUser(project.id, member.id, 'project:viewer');
+		await Container.get(ProjectService).addUser(project.id, {
+			userId: member.id,
+			role: 'project:viewer',
+		});
 
 		//
 		// ACT
