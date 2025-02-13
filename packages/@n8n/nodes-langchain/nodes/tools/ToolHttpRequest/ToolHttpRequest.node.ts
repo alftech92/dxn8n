@@ -38,7 +38,7 @@ export class ToolHttpRequest implements INodeType {
 		name: 'toolHttpRequest',
 		icon: { light: 'file:httprequest.svg', dark: 'file:httprequest.dark.svg' },
 		group: ['output'],
-		version: [1, 1.1],
+		version: [1, 1.1, 1.2],
 		description: 'Makes an HTTP request and returns the response data',
 		subtitle: '={{ $parameter.toolDescription }}',
 		defaults: {
@@ -112,6 +112,11 @@ export class ToolHttpRequest implements INodeType {
 				name: 'placeholderNotice',
 				type: 'notice',
 				default: '',
+				displayOptions: {
+					show: {
+						'@version': [{ _cnd: { lte: 1.1 } }],
+					},
+				},
 			},
 			{
 				displayName: 'URL',
@@ -119,7 +124,7 @@ export class ToolHttpRequest implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
-				placeholder: 'e.g. http://www.example.com/{path}',
+				placeholder: 'e.g. http://www.example.com/',
 			},
 			...authenticationProperties,
 			//----------------------------------------------------------------

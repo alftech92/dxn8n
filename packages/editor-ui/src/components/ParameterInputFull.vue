@@ -69,16 +69,10 @@ const menuExpanded = ref(false);
 const forceShowExpression = ref(false);
 
 const ndvStore = useNDVStore();
-const nodeTypesStore = useNodeTypesStore();
 const telemetry = useTelemetry();
 
 const node = computed(() => ndvStore.activeNode);
-const fromAIOverride = ref<FromAIOverride | null>(
-	makeOverrideValue(
-		props,
-		node.value && nodeTypesStore.getNodeType(node.value.type, node.value.typeVersion),
-	),
-);
+const fromAIOverride = ref<FromAIOverride | null>(makeOverrideValue(props, node.value));
 
 const canBeContentOverride = computed(() => {
 	// The resourceLocator handles overrides separately

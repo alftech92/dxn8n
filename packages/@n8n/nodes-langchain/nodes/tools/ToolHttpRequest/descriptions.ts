@@ -94,6 +94,11 @@ export const placeholderDefinitionsCollection: INodeProperties = {
 	},
 	placeholder: 'Add Definition',
 	default: [],
+	displayOptions: {
+		show: {
+			'@version': [{ _cnd: { lte: '1.1 ' } }],
+		},
+	},
 	options: [
 		{
 			name: 'values',
